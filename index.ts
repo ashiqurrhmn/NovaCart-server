@@ -347,7 +347,7 @@ app.delete('/wishlist/:userId/item/:itemId', async (req, res) => {
 
 // --- STRIPE & ORDERS ENDPOINTS ---
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2025-01-27.acacia"
+  apiVersion: "2026-06-24.dahlia"
 });
 
 app.post('/create-payment-intent', async (req, res) => {
@@ -376,15 +376,20 @@ app.post('/create-payment-intent', async (req, res) => {
 
 app.post('/orders', async (req, res) => {
   try {
-    const { userId, items, totalAmount, deliveryAddress, paymentIntentId } = req.body;
+    const { userId, userName, userEmail, userImage, items, totalAmount, deliveryAddress, paymentIntentId } = req.body;
     
     const order = {
       userId,
+      userName,
+      userEmail,
+      userImage,
       items,
       totalAmount,
       deliveryAddress,
       paymentIntentId,
-      status: 'paid',
+      status: 'processing',
+      paymentStatus: 'paid',
+      
       createdAt: new Date()
     };
 
@@ -394,6 +399,45 @@ app.post('/orders', async (req, res) => {
     res.status(201).json({ message: "Order created successfully", orderId: result.insertedId });
   } catch (error) {
     console.error("Error creating order:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get('/orders/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const ordersCollection = client.db("novacart").collection("orders");
+    const orders = await ordersCollection.find({ userId }).sort({ createdAt: -1 }).toArray();
+    res.json(orders);
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get('/admin/orders', async (req, res) => {
+  try {
+    const ordersCollection = client.db("novacart").collection("orders");
+    const orders = await ordersCollection.find({}).sort({ createdAt: -1 }).toArray();
+    res.json(orders);
+  } catch (error) {
+    console.error("Error fetching all orders:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.patch('/admin/orders/:orderId/status', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+    const ordersCollection = client.db("novacart").collection("orders");
+    await ordersCollection.updateOne(
+      { _id: new ObjectId(orderId) },
+      { $set: { status } }
+    );
+    res.json({ message: "Order status updated successfully" });
+  } catch (error) {
+    console.error("Error updating order status:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
