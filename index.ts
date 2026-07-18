@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
 import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
+import Stripe from 'stripe';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -344,6 +345,60 @@ app.delete('/wishlist/:userId/item/:itemId', async (req, res) => {
   }
 });
 
+// --- STRIPE & ORDERS ENDPOINTS ---
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
+  apiVersion: "2025-01-27.acacia"
+});
+
+app.post('/create-payment-intent', async (req, res) => {
+  try {
+    const { items } = req.body;
+    
+    // Calculate total amount in cents
+    const totalAmount = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0) * 100;
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: totalAmount,
+      currency: "usd",
+      automatic_payment_methods: {
+        enabled: true,
+      },
+    });
+
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (error) {
+    console.error("Error creating payment intent:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post('/orders', async (req, res) => {
+  try {
+    const { userId, items, totalAmount, deliveryAddress, paymentIntentId } = req.body;
+    
+    const order = {
+      userId,
+      items,
+      totalAmount,
+      deliveryAddress,
+      paymentIntentId,
+      status: 'paid',
+      createdAt: new Date()
+    };
+
+    const ordersCollection = client.db("novacart").collection("orders");
+    const result = await ordersCollection.insertOne(order);
+
+    res.status(201).json({ message: "Order created successfully", orderId: result.insertedId });
+  } catch (error) {
+    console.error("Error creating order:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
+// Force restart
