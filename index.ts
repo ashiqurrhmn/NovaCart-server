@@ -442,6 +442,37 @@ app.patch('/admin/orders/:orderId/status', async (req, res) => {
   }
 });
 
+app.post('/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => {
+  // Webhook logic
+});
+
+// AI Content History Endpoints
+app.post('/ai-history', async (req, res) => {
+  try {
+    const historyItem = req.body;
+    // historyItem should contain { email, prompt, content, date }
+    if (!historyItem.email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    const result = await client.db("novacart").collection("aiHistory").insertOne(historyItem);
+    res.status(201).json({ insertedId: result.insertedId, ...historyItem });
+  } catch (error) {
+    console.error("Error saving AI history:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get('/ai-history/:email', async (req, res) => {
+  try {
+    const email = req.params.email;
+    const history = await client.db("novacart").collection("aiHistory").find({ email }).sort({ date: -1 }).toArray();
+    res.json(history);
+  } catch (error) {
+    console.error("Error fetching AI history:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
